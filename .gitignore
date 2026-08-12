@@ -1,0 +1,3 @@
+# Local deployment parameters copied from the private source repository.
+cloudformation/parameters.json
+

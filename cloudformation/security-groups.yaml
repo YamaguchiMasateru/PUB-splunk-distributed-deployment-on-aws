@@ -1,0 +1,465 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Security groups for the Splunk validation cluster.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  IngestSourceCidr1:
+    Type: String
+    Default: 203.0.113.10/32
+    Description: Primary allowed CIDR for Splunk HEC through the ALB.
+  IngestSourceCidr2:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for Splunk HEC through the ALB.
+  IngestSourceCidr3:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for Splunk HEC through the ALB.
+  IngestSourceCidr4:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for Splunk HEC through the ALB.
+  IngestSourceCidr5:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for Splunk HEC through the ALB.
+  ManagementSourceCidr1:
+    Type: String
+    Default: 203.0.113.10/32
+    Description: Primary allowed CIDR for administrative Splunk Web access through the ALB.
+  ManagementSourceCidr2:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for administrative Splunk Web access through the ALB.
+  ManagementSourceCidr3:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for administrative Splunk Web access through the ALB.
+  ManagementSourceCidr4:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for administrative Splunk Web access through the ALB.
+  ManagementSourceCidr5:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for administrative Splunk Web access through the ALB.
+
+Conditions:
+  HasIngestSourceCidr2: !Not [!Equals [!Ref IngestSourceCidr2, ""]]
+  HasIngestSourceCidr3: !Not [!Equals [!Ref IngestSourceCidr3, ""]]
+  HasIngestSourceCidr4: !Not [!Equals [!Ref IngestSourceCidr4, ""]]
+  HasIngestSourceCidr5: !Not [!Equals [!Ref IngestSourceCidr5, ""]]
+  HasManagementSourceCidr2: !Not [!Equals [!Ref ManagementSourceCidr2, ""]]
+  HasManagementSourceCidr3: !Not [!Equals [!Ref ManagementSourceCidr3, ""]]
+  HasManagementSourceCidr4: !Not [!Equals [!Ref ManagementSourceCidr4, ""]]
+  HasManagementSourceCidr5: !Not [!Equals [!Ref ManagementSourceCidr5, ""]]
+
+Resources:
+  PublicAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Internet-facing public ALB security group for SHC Splunk Web and HEC.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          DestinationSecurityGroupId: !Ref ShcSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 8088
+          ToPort: 8088
+          DestinationSecurityGroupId: !Ref IndexerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-public-alb-sg
+
+  AdminAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Internet-facing administrative ALB security group for backend Splunk Web.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          DestinationSecurityGroupId: !Ref MgmtSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          DestinationSecurityGroupId: !Ref CmSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          DestinationSecurityGroupId: !Ref IndexerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-admin-alb-sg
+
+  ShcSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Search head cluster member security group.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-shc-sg
+
+  MgmtSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Management server security group.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-mgmt-sg
+
+  CmSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Indexer cluster manager security group.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-cm-sg
+
+  IndexerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Indexer peer node security group.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-indexer-sg
+
+  ShcWebFromAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ShcSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId: !Ref PublicAlbSecurityGroup
+
+  MgmtWebFromAdminAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref MgmtSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId: !Ref AdminAlbSecurityGroup
+
+  CmWebFromAdminAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref CmSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId: !Ref AdminAlbSecurityGroup
+
+  IndexerWebFromAdminAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref IndexerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId: !Ref AdminAlbSecurityGroup
+
+  AdminAlbManagementWebFromCidr1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AdminAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref ManagementSourceCidr1
+
+  AdminAlbManagementWebFromCidr2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasManagementSourceCidr2
+    Properties:
+      GroupId: !Ref AdminAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref ManagementSourceCidr2
+
+  AdminAlbManagementWebFromCidr3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasManagementSourceCidr3
+    Properties:
+      GroupId: !Ref AdminAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref ManagementSourceCidr3
+
+  AdminAlbManagementWebFromCidr4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasManagementSourceCidr4
+    Properties:
+      GroupId: !Ref AdminAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref ManagementSourceCidr4
+
+  AdminAlbManagementWebFromCidr5:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasManagementSourceCidr5
+    Properties:
+      GroupId: !Ref AdminAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref ManagementSourceCidr5
+
+  AlbHecFromCidr1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref PublicAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8088
+      ToPort: 8088
+      CidrIp: !Ref IngestSourceCidr1
+
+  AlbHecFromCidr2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngestSourceCidr2
+    Properties:
+      GroupId: !Ref PublicAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8088
+      ToPort: 8088
+      CidrIp: !Ref IngestSourceCidr2
+
+  AlbHecFromCidr3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngestSourceCidr3
+    Properties:
+      GroupId: !Ref PublicAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8088
+      ToPort: 8088
+      CidrIp: !Ref IngestSourceCidr3
+
+  AlbHecFromCidr4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngestSourceCidr4
+    Properties:
+      GroupId: !Ref PublicAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8088
+      ToPort: 8088
+      CidrIp: !Ref IngestSourceCidr4
+
+  AlbHecFromCidr5:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngestSourceCidr5
+    Properties:
+      GroupId: !Ref PublicAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8088
+      ToPort: 8088
+      CidrIp: !Ref IngestSourceCidr5
+
+  ShcMgmtFromShc:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ShcSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref ShcSecurityGroup
+
+  ShcMgmtFromMgmt:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ShcSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref MgmtSecurityGroup
+
+  ShcMgmtFromCm:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ShcSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref CmSecurityGroup
+
+  ShcReplicationFromShc:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ShcSecurityGroup
+      IpProtocol: tcp
+      FromPort: 34567
+      ToPort: 34567
+      SourceSecurityGroupId: !Ref ShcSecurityGroup
+
+  MgmtMgmtFromShc:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref MgmtSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref ShcSecurityGroup
+
+  MgmtMgmtFromCm:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref MgmtSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref CmSecurityGroup
+
+  MgmtMgmtFromIndexer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref MgmtSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref IndexerSecurityGroup
+
+  CmMgmtFromShc:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref CmSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref ShcSecurityGroup
+
+  CmMgmtFromMgmt:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref CmSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref MgmtSecurityGroup
+
+  CmMgmtFromIndexer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref CmSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref IndexerSecurityGroup
+
+  IndexerMgmtFromShc:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref IndexerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref ShcSecurityGroup
+
+  IndexerMgmtFromMgmt:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref IndexerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref MgmtSecurityGroup
+
+  IndexerMgmtFromCm:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref IndexerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8089
+      ToPort: 8089
+      SourceSecurityGroupId: !Ref CmSecurityGroup
+
+  IndexerReceivingFromShc:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref IndexerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 9997
+      ToPort: 9997
+      SourceSecurityGroupId: !Ref ShcSecurityGroup
+
+  IndexerReceivingFromMgmt:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref IndexerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 9997
+      ToPort: 9997
+      SourceSecurityGroupId: !Ref MgmtSecurityGroup
+
+  IndexerReceivingFromCm:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref IndexerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 9997
+      ToPort: 9997
+      SourceSecurityGroupId: !Ref CmSecurityGroup
+
+  IndexerHecFromAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref IndexerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8088
+      ToPort: 8088
+      SourceSecurityGroupId: !Ref PublicAlbSecurityGroup
+
+  IndexerReplicationFromIndexer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref IndexerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 9887
+      ToPort: 9887
+      SourceSecurityGroupId: !Ref IndexerSecurityGroup
+
+Outputs:
+  PublicAlbSecurityGroupId:
+    Value: !Ref PublicAlbSecurityGroup
+  AdminAlbSecurityGroupId:
+    Value: !Ref AdminAlbSecurityGroup
+  AlbSecurityGroupId:
+    Value: !Ref PublicAlbSecurityGroup
+  ShcSecurityGroupId:
+    Value: !Ref ShcSecurityGroup
+  MgmtSecurityGroupId:
+    Value: !Ref MgmtSecurityGroup
+  CmSecurityGroupId:
+    Value: !Ref CmSecurityGroup
+  IndexerSecurityGroupId:
+    Value: !Ref IndexerSecurityGroup

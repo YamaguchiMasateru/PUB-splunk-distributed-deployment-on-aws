@@ -1,0 +1,284 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Parent nested stack for the Splunk validation cluster.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  TemplateBucket:
+    Type: String
+    Default: example-splunk-deployment-bucket
+  TemplatePrefix:
+    Type: String
+    Default: Cfn_Template
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetACidr:
+    Type: String
+    Default: 10.0.1.0/24
+  PublicSubnetCCidr:
+    Type: String
+    Default: 10.0.3.0/24
+  PrivateSubnetACidr:
+    Type: String
+    Default: 10.0.2.0/24
+  PrivateSubnetCCidr:
+    Type: String
+    Default: 10.0.4.0/24
+  AvailabilityZoneA:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-northeast-1a
+  AvailabilityZoneC:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-northeast-1c
+  Shc1AmiId:
+    Type: AWS::EC2::Image::Id
+  Shc2AmiId:
+    Type: AWS::EC2::Image::Id
+  MgmtAmiId:
+    Type: AWS::EC2::Image::Id
+  CmAmiId:
+    Type: AWS::EC2::Image::Id
+  Indexer1AmiId:
+    Type: AWS::EC2::Image::Id
+  Indexer2AmiId:
+    Type: AWS::EC2::Image::Id
+  Indexer3AmiId:
+    Type: AWS::EC2::Image::Id
+  InstanceType:
+    Type: String
+    Default: t3.large
+  PrivateZoneName:
+    Type: String
+    Default: example.com
+  PublicHostedZoneId:
+    Type: String
+    Default: ""
+  AlbRecordName:
+    Type: String
+    Default: alb.example.com
+  MgmtAlbRecordName:
+    Type: String
+    Default: mgmt-alb.example.com
+  CmAlbRecordName:
+    Type: String
+    Default: cm-alb.example.com
+  Indexer1AlbRecordName:
+    Type: String
+    Default: indexer-1-alb.example.com
+  Indexer2AlbRecordName:
+    Type: String
+    Default: indexer-2-alb.example.com
+  Indexer3AlbRecordName:
+    Type: String
+    Default: indexer-3-alb.example.com
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN for the ALB HTTPS listeners.
+  IngestSourceCidr1:
+    Type: String
+    Default: 203.0.113.0/24
+    Description: Primary allowed CIDR for Splunk HEC through the ALB.
+  IngestSourceCidr2:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for Splunk HEC through the ALB.
+  IngestSourceCidr3:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for Splunk HEC through the ALB.
+  IngestSourceCidr4:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for Splunk HEC through the ALB.
+  IngestSourceCidr5:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for Splunk HEC through the ALB.
+  ManagementSourceCidr1:
+    Type: String
+    Default: 203.0.113.0/24
+    Description: Primary allowed CIDR for administrative Splunk Web access through the ALB.
+  ManagementSourceCidr2:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for administrative Splunk Web access through the ALB.
+  ManagementSourceCidr3:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for administrative Splunk Web access through the ALB.
+  ManagementSourceCidr4:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for administrative Splunk Web access through the ALB.
+  ManagementSourceCidr5:
+    Type: String
+    Default: ""
+    Description: Optional allowed CIDR for administrative Splunk Web access through the ALB.
+
+Resources:
+  Network:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/vpc-network.yaml
+      Parameters:
+        Environment: !Ref Environment
+        VpcCidr: !Ref VpcCidr
+        PublicSubnetACidr: !Ref PublicSubnetACidr
+        PublicSubnetCCidr: !Ref PublicSubnetCCidr
+        PrivateSubnetACidr: !Ref PrivateSubnetACidr
+        PrivateSubnetCCidr: !Ref PrivateSubnetCCidr
+        AvailabilityZoneA: !Ref AvailabilityZoneA
+        AvailabilityZoneC: !Ref AvailabilityZoneC
+
+  SecurityGroups:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/security-groups.yaml
+      Parameters:
+        Environment: !Ref Environment
+        VpcId: !GetAtt Network.Outputs.VpcId
+        IngestSourceCidr1: !Ref IngestSourceCidr1
+        IngestSourceCidr2: !Ref IngestSourceCidr2
+        IngestSourceCidr3: !Ref IngestSourceCidr3
+        IngestSourceCidr4: !Ref IngestSourceCidr4
+        IngestSourceCidr5: !Ref IngestSourceCidr5
+        ManagementSourceCidr1: !Ref ManagementSourceCidr1
+        ManagementSourceCidr2: !Ref ManagementSourceCidr2
+        ManagementSourceCidr3: !Ref ManagementSourceCidr3
+        ManagementSourceCidr4: !Ref ManagementSourceCidr4
+        ManagementSourceCidr5: !Ref ManagementSourceCidr5
+
+  IamRoles:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/iam-roles.yaml
+      Parameters:
+        Environment: !Ref Environment
+        TemplateBucketName: !Ref TemplateBucket
+
+  ShcInstances:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/ec2-shc.yaml
+      Parameters:
+        Environment: !Ref Environment
+        Shc1AmiId: !Ref Shc1AmiId
+        Shc2AmiId: !Ref Shc2AmiId
+        InstanceType: !Ref InstanceType
+        InstanceProfileName: !GetAtt IamRoles.Outputs.SplunkEc2InstanceProfileName
+        PublicSubnetAId: !GetAtt Network.Outputs.PublicSubnetAId
+        PublicSubnetCId: !GetAtt Network.Outputs.PublicSubnetCId
+        ShcSecurityGroupId: !GetAtt SecurityGroups.Outputs.ShcSecurityGroupId
+        PrivateZoneName: !Ref PrivateZoneName
+
+  PrivateInstances:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/ec2-private.yaml
+      Parameters:
+        Environment: !Ref Environment
+        MgmtAmiId: !Ref MgmtAmiId
+        CmAmiId: !Ref CmAmiId
+        Indexer1AmiId: !Ref Indexer1AmiId
+        Indexer2AmiId: !Ref Indexer2AmiId
+        Indexer3AmiId: !Ref Indexer3AmiId
+        InstanceType: !Ref InstanceType
+        InstanceProfileName: !GetAtt IamRoles.Outputs.SplunkEc2InstanceProfileName
+        PrivateSubnetAId: !GetAtt Network.Outputs.PrivateSubnetAId
+        MgmtSecurityGroupId: !GetAtt SecurityGroups.Outputs.MgmtSecurityGroupId
+        CmSecurityGroupId: !GetAtt SecurityGroups.Outputs.CmSecurityGroupId
+        IndexerSecurityGroupId: !GetAtt SecurityGroups.Outputs.IndexerSecurityGroupId
+        PrivateZoneName: !Ref PrivateZoneName
+
+  Alb:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/alb.yaml
+      Parameters:
+        Environment: !Ref Environment
+        VpcId: !GetAtt Network.Outputs.VpcId
+        PublicSubnetAId: !GetAtt Network.Outputs.PublicSubnetAId
+        PublicSubnetCId: !GetAtt Network.Outputs.PublicSubnetCId
+        PublicAlbSecurityGroupId: !GetAtt SecurityGroups.Outputs.PublicAlbSecurityGroupId
+        Shc1InstanceId: !GetAtt ShcInstances.Outputs.Shc1InstanceId
+        Shc2InstanceId: !GetAtt ShcInstances.Outputs.Shc2InstanceId
+        Indexer1InstanceId: !GetAtt PrivateInstances.Outputs.Indexer1InstanceId
+        Indexer2InstanceId: !GetAtt PrivateInstances.Outputs.Indexer2InstanceId
+        Indexer3InstanceId: !GetAtt PrivateInstances.Outputs.Indexer3InstanceId
+        CertificateArn: !Ref CertificateArn
+
+  AdminAlb:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/admin-alb.yaml
+      Parameters:
+        Environment: !Ref Environment
+        VpcId: !GetAtt Network.Outputs.VpcId
+        PublicSubnetAId: !GetAtt Network.Outputs.PublicSubnetAId
+        PublicSubnetCId: !GetAtt Network.Outputs.PublicSubnetCId
+        AdminAlbSecurityGroupId: !GetAtt SecurityGroups.Outputs.AdminAlbSecurityGroupId
+        MgmtInstanceId: !GetAtt PrivateInstances.Outputs.MgmtInstanceId
+        CmInstanceId: !GetAtt PrivateInstances.Outputs.CmInstanceId
+        Indexer1InstanceId: !GetAtt PrivateInstances.Outputs.Indexer1InstanceId
+        Indexer2InstanceId: !GetAtt PrivateInstances.Outputs.Indexer2InstanceId
+        Indexer3InstanceId: !GetAtt PrivateInstances.Outputs.Indexer3InstanceId
+        CertificateArn: !Ref CertificateArn
+        MgmtAlbRecordName: !Ref MgmtAlbRecordName
+        CmAlbRecordName: !Ref CmAlbRecordName
+        Indexer1AlbRecordName: !Ref Indexer1AlbRecordName
+        Indexer2AlbRecordName: !Ref Indexer2AlbRecordName
+        Indexer3AlbRecordName: !Ref Indexer3AlbRecordName
+
+  Dns:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/route53.yaml
+      Parameters:
+        Environment: !Ref Environment
+        VpcId: !GetAtt Network.Outputs.VpcId
+        PrivateZoneName: !Ref PrivateZoneName
+        PublicHostedZoneId: !Ref PublicHostedZoneId
+        AlbRecordName: !Ref AlbRecordName
+        AlbDnsName: !GetAtt Alb.Outputs.AlbDnsName
+        AlbCanonicalHostedZoneId: !GetAtt Alb.Outputs.AlbCanonicalHostedZoneId
+        MgmtAlbRecordName: !Ref MgmtAlbRecordName
+        CmAlbRecordName: !Ref CmAlbRecordName
+        Indexer1AlbRecordName: !Ref Indexer1AlbRecordName
+        Indexer2AlbRecordName: !Ref Indexer2AlbRecordName
+        Indexer3AlbRecordName: !Ref Indexer3AlbRecordName
+        AdminAlbDnsName: !GetAtt AdminAlb.Outputs.AdminAlbDnsName
+        AdminAlbCanonicalHostedZoneId: !GetAtt AdminAlb.Outputs.AdminAlbCanonicalHostedZoneId
+
+Outputs:
+  VpcId:
+    Value: !GetAtt Network.Outputs.VpcId
+  AlbDnsName:
+    Value: !GetAtt Alb.Outputs.AlbDnsName
+  AdminAlbDnsName:
+    Value: !GetAtt AdminAlb.Outputs.AdminAlbDnsName
+  AlbUrl:
+    Value: !Sub https://${AlbRecordName}
+  HecUrl:
+    Value: !Sub https://${AlbRecordName}:8088
+  MgmtSplunkWebUrl:
+    Value: !Sub https://${MgmtAlbRecordName}
+  CmSplunkWebUrl:
+    Value: !Sub https://${CmAlbRecordName}
+  Indexer1SplunkWebUrl:
+    Value: !Sub https://${Indexer1AlbRecordName}
+  Indexer2SplunkWebUrl:
+    Value: !Sub https://${Indexer2AlbRecordName}
+  Indexer3SplunkWebUrl:
+    Value: !Sub https://${Indexer3AlbRecordName}
+  PrivateHostedZoneId:
+    Value: !GetAtt Dns.Outputs.PrivateHostedZoneId
+  Shc1InstanceId:
+    Value: !GetAtt ShcInstances.Outputs.Shc1InstanceId
+  Shc2InstanceId:
+    Value: !GetAtt ShcInstances.Outputs.Shc2InstanceId
+  MgmtInstanceId:
+    Value: !GetAtt PrivateInstances.Outputs.MgmtInstanceId
+  CmInstanceId:
+    Value: !GetAtt PrivateInstances.Outputs.CmInstanceId

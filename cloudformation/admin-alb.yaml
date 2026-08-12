@@ -1,0 +1,272 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Internet-facing administrative ALB for backend Splunk Web. Port 8089 is intentionally not exposed.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnetCId:
+    Type: AWS::EC2::Subnet::Id
+  AdminAlbSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  MgmtInstanceId:
+    Type: String
+  CmInstanceId:
+    Type: String
+  Indexer1InstanceId:
+    Type: String
+  Indexer2InstanceId:
+    Type: String
+  Indexer3InstanceId:
+    Type: String
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN for *.example.com.
+  MgmtAlbRecordName:
+    Type: String
+    Default: mgmt-alb.example.com
+  CmAlbRecordName:
+    Type: String
+    Default: cm-alb.example.com
+  Indexer1AlbRecordName:
+    Type: String
+    Default: indexer-1-alb.example.com
+  Indexer2AlbRecordName:
+    Type: String
+    Default: indexer-2-alb.example.com
+  Indexer3AlbRecordName:
+    Type: String
+    Default: indexer-3-alb.example.com
+  HealthCheckPath:
+    Type: String
+    Default: /en-US/account/login
+
+Resources:
+  AdminSplunkAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub splunk-${Environment}-admin-alb
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+      SecurityGroups:
+        - !Ref AdminAlbSecurityGroupId
+      Subnets:
+        - !Ref PublicSubnetAId
+        - !Ref PublicSubnetCId
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-admin-alb
+
+  MgmtWebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub splunk-${Environment}-adm-mgmt-tg
+      VpcId: !Ref VpcId
+      TargetType: instance
+      Protocol: HTTP
+      Port: 8000
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: !Ref HealthCheckPath
+      Matcher:
+        HttpCode: 200-399
+      Targets:
+        - Id: !Ref MgmtInstanceId
+          Port: 8000
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-adm-mgmt-tg
+
+  CmWebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub splunk-${Environment}-adm-cm-tg
+      VpcId: !Ref VpcId
+      TargetType: instance
+      Protocol: HTTP
+      Port: 8000
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: !Ref HealthCheckPath
+      Matcher:
+        HttpCode: 200-399
+      Targets:
+        - Id: !Ref CmInstanceId
+          Port: 8000
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-adm-cm-tg
+
+  Indexer1WebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub splunk-${Environment}-adm-idx1-tg
+      VpcId: !Ref VpcId
+      TargetType: instance
+      Protocol: HTTP
+      Port: 8000
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: !Ref HealthCheckPath
+      Matcher:
+        HttpCode: 200-399
+      Targets:
+        - Id: !Ref Indexer1InstanceId
+          Port: 8000
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-adm-idx1-tg
+
+  Indexer2WebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub splunk-${Environment}-adm-idx2-tg
+      VpcId: !Ref VpcId
+      TargetType: instance
+      Protocol: HTTP
+      Port: 8000
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: !Ref HealthCheckPath
+      Matcher:
+        HttpCode: 200-399
+      Targets:
+        - Id: !Ref Indexer2InstanceId
+          Port: 8000
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-adm-idx2-tg
+
+  Indexer3WebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub splunk-${Environment}-adm-idx3-tg
+      VpcId: !Ref VpcId
+      TargetType: instance
+      Protocol: HTTP
+      Port: 8000
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: !Ref HealthCheckPath
+      Matcher:
+        HttpCode: 200-399
+      Targets:
+        - Id: !Ref Indexer3InstanceId
+          Port: 8000
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-adm-idx3-tg
+
+  AdminHttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref AdminSplunkAlb
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: Not Found
+            StatusCode: "404"
+
+  MgmtWebListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref AdminHttpsListener
+      Priority: 10
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Ref MgmtAlbRecordName
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref MgmtWebTargetGroup
+
+  CmWebListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref AdminHttpsListener
+      Priority: 20
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Ref CmAlbRecordName
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref CmWebTargetGroup
+
+  Indexer1WebListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref AdminHttpsListener
+      Priority: 30
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Ref Indexer1AlbRecordName
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref Indexer1WebTargetGroup
+
+  Indexer2WebListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref AdminHttpsListener
+      Priority: 40
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Ref Indexer2AlbRecordName
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref Indexer2WebTargetGroup
+
+  Indexer3WebListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref AdminHttpsListener
+      Priority: 50
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Ref Indexer3AlbRecordName
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref Indexer3WebTargetGroup
+
+Outputs:
+  AdminAlbArn:
+    Value: !Ref AdminSplunkAlb
+  AdminAlbDnsName:
+    Value: !GetAtt AdminSplunkAlb.DNSName
+  AdminAlbCanonicalHostedZoneId:
+    Value: !GetAtt AdminSplunkAlb.CanonicalHostedZoneID
+  MgmtWebTargetGroupArn:
+    Value: !Ref MgmtWebTargetGroup
+  CmWebTargetGroupArn:
+    Value: !Ref CmWebTargetGroup
+  Indexer1WebTargetGroupArn:
+    Value: !Ref Indexer1WebTargetGroup
+  Indexer2WebTargetGroupArn:
+    Value: !Ref Indexer2WebTargetGroup
+  Indexer3WebTargetGroupArn:
+    Value: !Ref Indexer3WebTargetGroup

@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Two public Search Head Cluster EC2 instances with cfn-init and cfn-signal.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  Shc1AmiId:
+    Type: AWS::EC2::Image::Id
+  Shc2AmiId:
+    Type: AWS::EC2::Image::Id
+  InstanceType:
+    Type: String
+    Default: t3.large
+  InstanceProfileName:
+    Type: String
+  PublicSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnetCId:
+    Type: AWS::EC2::Subnet::Id
+  ShcSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  PrivateZoneName:
+    Type: String
+    Default: example.com
+
+Resources:
+  Shc1Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT30M
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /etc/splunk-role:
+              content: !Sub |
+                ROLE=shc-member
+                HOSTNAME=shc-1.${PrivateZoneName}
+              mode: "000644"
+              owner: root
+              group: root
+          commands:
+            01_hostname:
+              command: !Sub hostnamectl set-hostname shc-1.${PrivateZoneName}
+            02_hosts_self:
+              command: !Sub |
+                sed -i -E '/(^|[[:space:]])shc-1(\.|[[:space:]]|$)/d' /etc/hosts
+                echo '127.0.1.1 shc-1.${PrivateZoneName} shc-1' >> /etc/hosts
+    Properties:
+      ImageId: !Ref Shc1AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfileName
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref PublicSubnetAId
+          AssociatePublicIpAddress: true
+          PrivateIpAddress: 10.0.1.10
+          GroupSet:
+            - !Ref ShcSecurityGroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            Encrypted: false
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-shc-1
+        - Key: SplunkRole
+          Value: shc-member
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource Shc1Instance --region ${AWS::Region}
+          init_exit=$?
+          /opt/aws/bin/cfn-signal -e "${!init_exit}" --stack ${AWS::StackName} --resource Shc1Instance --region ${AWS::Region}
+          exit "${!init_exit}"
+
+  Shc2Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT30M
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /etc/splunk-role:
+              content: !Sub |
+                ROLE=shc-member
+                HOSTNAME=shc-2.${PrivateZoneName}
+              mode: "000644"
+              owner: root
+              group: root
+          commands:
+            01_hostname:
+              command: !Sub hostnamectl set-hostname shc-2.${PrivateZoneName}
+            02_hosts_self:
+              command: !Sub |
+                sed -i -E '/(^|[[:space:]])shc-2(\.|[[:space:]]|$)/d' /etc/hosts
+                echo '127.0.1.1 shc-2.${PrivateZoneName} shc-2' >> /etc/hosts
+    Properties:
+      ImageId: !Ref Shc2AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfileName
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref PublicSubnetCId
+          AssociatePublicIpAddress: true
+          PrivateIpAddress: 10.0.3.10
+          GroupSet:
+            - !Ref ShcSecurityGroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            Encrypted: false
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-shc-2
+        - Key: SplunkRole
+          Value: shc-member
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource Shc2Instance --region ${AWS::Region}
+          init_exit=$?
+          /opt/aws/bin/cfn-signal -e "${!init_exit}" --stack ${AWS::StackName} --resource Shc2Instance --region ${AWS::Region}
+          exit "${!init_exit}"
+
+Outputs:
+  Shc1InstanceId:
+    Value: !Ref Shc1Instance
+  Shc2InstanceId:
+    Value: !Ref Shc2Instance
+  Shc1PrivateIp:
+    Value: 10.0.1.10
+  Shc2PrivateIp:
+    Value: 10.0.3.10

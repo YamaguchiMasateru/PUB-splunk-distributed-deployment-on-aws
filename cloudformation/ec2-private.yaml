@@ -1,0 +1,321 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Private Splunk management, cluster manager, and indexer EC2 instances.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  MgmtAmiId:
+    Type: AWS::EC2::Image::Id
+  CmAmiId:
+    Type: AWS::EC2::Image::Id
+  Indexer1AmiId:
+    Type: AWS::EC2::Image::Id
+  Indexer2AmiId:
+    Type: AWS::EC2::Image::Id
+  Indexer3AmiId:
+    Type: AWS::EC2::Image::Id
+  InstanceType:
+    Type: String
+    Default: t3.large
+  InstanceProfileName:
+    Type: String
+  PrivateSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  MgmtSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  CmSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  IndexerSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  PrivateZoneName:
+    Type: String
+    Default: example.com
+
+Resources:
+  MgmtInstance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT30M
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /etc/splunk-role:
+              content: !Sub |
+                ROLE=mgmt-deployer-license-manager
+                HOSTNAME=mgmt.${PrivateZoneName}
+              mode: "000644"
+              owner: root
+              group: root
+          commands:
+            01_hostname:
+              command: !Sub hostnamectl set-hostname mgmt.${PrivateZoneName}
+            02_hosts_self:
+              command: !Sub |
+                sed -i -E '/(^|[[:space:]])mgmt(\.|[[:space:]]|$)/d' /etc/hosts
+                echo '127.0.1.1 mgmt.${PrivateZoneName} mgmt' >> /etc/hosts
+    Properties:
+      ImageId: !Ref MgmtAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfileName
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref PrivateSubnetAId
+          AssociatePublicIpAddress: false
+          PrivateIpAddress: 10.0.2.10
+          GroupSet:
+            - !Ref MgmtSecurityGroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            Encrypted: false
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-mgmt
+        - Key: SplunkRole
+          Value: mgmt
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MgmtInstance --region ${AWS::Region}
+          init_exit=$?
+          /opt/aws/bin/cfn-signal -e "${!init_exit}" --stack ${AWS::StackName} --resource MgmtInstance --region ${AWS::Region}
+          exit "${!init_exit}"
+
+  CmInstance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT30M
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /etc/splunk-role:
+              content: !Sub |
+                ROLE=indexer-cluster-manager
+                HOSTNAME=cm.${PrivateZoneName}
+              mode: "000644"
+              owner: root
+              group: root
+          commands:
+            01_hostname:
+              command: !Sub hostnamectl set-hostname cm.${PrivateZoneName}
+            02_hosts_self:
+              command: !Sub |
+                sed -i -E '/(^|[[:space:]])cm(\.|[[:space:]]|$)/d' /etc/hosts
+                echo '127.0.1.1 cm.${PrivateZoneName} cm' >> /etc/hosts
+    Properties:
+      ImageId: !Ref CmAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfileName
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref PrivateSubnetAId
+          AssociatePublicIpAddress: false
+          PrivateIpAddress: 10.0.2.11
+          GroupSet:
+            - !Ref CmSecurityGroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            Encrypted: false
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-cm
+        - Key: SplunkRole
+          Value: cluster-manager
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource CmInstance --region ${AWS::Region}
+          init_exit=$?
+          /opt/aws/bin/cfn-signal -e "${!init_exit}" --stack ${AWS::StackName} --resource CmInstance --region ${AWS::Region}
+          exit "${!init_exit}"
+
+  Indexer1Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT30M
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /etc/splunk-role:
+              content: !Sub |
+                ROLE=indexer-peer
+                HOSTNAME=indexer-1.${PrivateZoneName}
+              mode: "000644"
+              owner: root
+              group: root
+          commands:
+            01_hostname:
+              command: !Sub hostnamectl set-hostname indexer-1.${PrivateZoneName}
+            02_hosts_self:
+              command: !Sub |
+                sed -i -E '/(^|[[:space:]])indexer-1(\.|[[:space:]]|$)/d' /etc/hosts
+                echo '127.0.1.1 indexer-1.${PrivateZoneName} indexer-1' >> /etc/hosts
+    Properties:
+      ImageId: !Ref Indexer1AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfileName
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref PrivateSubnetAId
+          AssociatePublicIpAddress: false
+          PrivateIpAddress: 10.0.2.12
+          GroupSet:
+            - !Ref IndexerSecurityGroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            Encrypted: false
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-indexer-1
+        - Key: SplunkRole
+          Value: indexer-peer
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource Indexer1Instance --region ${AWS::Region}
+          init_exit=$?
+          /opt/aws/bin/cfn-signal -e "${!init_exit}" --stack ${AWS::StackName} --resource Indexer1Instance --region ${AWS::Region}
+          exit "${!init_exit}"
+
+  Indexer2Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT30M
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /etc/splunk-role:
+              content: !Sub |
+                ROLE=indexer-peer
+                HOSTNAME=indexer-2.${PrivateZoneName}
+              mode: "000644"
+              owner: root
+              group: root
+          commands:
+            01_hostname:
+              command: !Sub hostnamectl set-hostname indexer-2.${PrivateZoneName}
+            02_hosts_self:
+              command: !Sub |
+                sed -i -E '/(^|[[:space:]])indexer-2(\.|[[:space:]]|$)/d' /etc/hosts
+                echo '127.0.1.1 indexer-2.${PrivateZoneName} indexer-2' >> /etc/hosts
+    Properties:
+      ImageId: !Ref Indexer2AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfileName
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref PrivateSubnetAId
+          AssociatePublicIpAddress: false
+          PrivateIpAddress: 10.0.2.13
+          GroupSet:
+            - !Ref IndexerSecurityGroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            Encrypted: false
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-indexer-2
+        - Key: SplunkRole
+          Value: indexer-peer
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource Indexer2Instance --region ${AWS::Region}
+          init_exit=$?
+          /opt/aws/bin/cfn-signal -e "${!init_exit}" --stack ${AWS::StackName} --resource Indexer2Instance --region ${AWS::Region}
+          exit "${!init_exit}"
+
+  Indexer3Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT30M
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /etc/splunk-role:
+              content: !Sub |
+                ROLE=indexer-peer
+                HOSTNAME=indexer-3.${PrivateZoneName}
+              mode: "000644"
+              owner: root
+              group: root
+          commands:
+            01_hostname:
+              command: !Sub hostnamectl set-hostname indexer-3.${PrivateZoneName}
+            02_hosts_self:
+              command: !Sub |
+                sed -i -E '/(^|[[:space:]])indexer-3(\.|[[:space:]]|$)/d' /etc/hosts
+                echo '127.0.1.1 indexer-3.${PrivateZoneName} indexer-3' >> /etc/hosts
+    Properties:
+      ImageId: !Ref Indexer3AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfileName
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref PrivateSubnetAId
+          AssociatePublicIpAddress: false
+          PrivateIpAddress: 10.0.2.14
+          GroupSet:
+            - !Ref IndexerSecurityGroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            Encrypted: false
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-indexer-3
+        - Key: SplunkRole
+          Value: indexer-peer
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource Indexer3Instance --region ${AWS::Region}
+          init_exit=$?
+          /opt/aws/bin/cfn-signal -e "${!init_exit}" --stack ${AWS::StackName} --resource Indexer3Instance --region ${AWS::Region}
+          exit "${!init_exit}"
+
+Outputs:
+  MgmtInstanceId:
+    Value: !Ref MgmtInstance
+  CmInstanceId:
+    Value: !Ref CmInstance
+  Indexer1InstanceId:
+    Value: !Ref Indexer1Instance
+  Indexer2InstanceId:
+    Value: !Ref Indexer2Instance
+  Indexer3InstanceId:
+    Value: !Ref Indexer3Instance

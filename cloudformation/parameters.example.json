@@ -1,0 +1,82 @@
+[
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "dev"
+  },
+  {
+    "ParameterKey": "TemplateBucket",
+    "ParameterValue": "example-splunk-deployment-bucket"
+  },
+  {
+    "ParameterKey": "TemplatePrefix",
+    "ParameterValue": "Cfn_Template"
+  },
+  {
+    "ParameterKey": "Shc1AmiId",
+    "ParameterValue": "<SHC_1_AMI_ID>"
+  },
+  {
+    "ParameterKey": "Shc2AmiId",
+    "ParameterValue": "<SHC_2_AMI_ID>"
+  },
+  {
+    "ParameterKey": "MgmtAmiId",
+    "ParameterValue": "<MGMT_AMI_ID>"
+  },
+  {
+    "ParameterKey": "CmAmiId",
+    "ParameterValue": "<CM_AMI_ID>"
+  },
+  {
+    "ParameterKey": "Indexer1AmiId",
+    "ParameterValue": "<INDEXER_1_AMI_ID>"
+  },
+  {
+    "ParameterKey": "Indexer2AmiId",
+    "ParameterValue": "<INDEXER_2_AMI_ID>"
+  },
+  {
+    "ParameterKey": "Indexer3AmiId",
+    "ParameterValue": "<INDEXER_3_AMI_ID>"
+  },
+  {
+    "ParameterKey": "PublicHostedZoneId",
+    "ParameterValue": "<HOSTED_ZONE_ID>"
+  },
+  {
+    "ParameterKey": "AlbRecordName",
+    "ParameterValue": "alb.example.com"
+  },
+  {
+    "ParameterKey": "MgmtAlbRecordName",
+    "ParameterValue": "mgmt-alb.example.com"
+  },
+  {
+    "ParameterKey": "CmAlbRecordName",
+    "ParameterValue": "cm-alb.example.com"
+  },
+  {
+    "ParameterKey": "Indexer1AlbRecordName",
+    "ParameterValue": "indexer-1-alb.example.com"
+  },
+  {
+    "ParameterKey": "Indexer2AlbRecordName",
+    "ParameterValue": "indexer-2-alb.example.com"
+  },
+  {
+    "ParameterKey": "Indexer3AlbRecordName",
+    "ParameterValue": "indexer-3-alb.example.com"
+  },
+  {
+    "ParameterKey": "CertificateArn",
+    "ParameterValue": "<CERTIFICATE_ARN>"
+  },
+  {
+    "ParameterKey": "IngestSourceCidr1",
+    "ParameterValue": "203.0.113.0/24"
+  },
+  {
+    "ParameterKey": "ManagementSourceCidr1",
+    "ParameterValue": "203.0.113.0/24"
+  }
+]

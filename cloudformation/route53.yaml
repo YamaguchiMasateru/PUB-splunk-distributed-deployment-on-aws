@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Route 53 private hosted zone, internal A records, and optional public ALB aliases.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PrivateZoneName:
+    Type: String
+    Default: example.com
+  PublicHostedZoneId:
+    Type: String
+    Default: ""
+    Description: Existing public hosted zone ID. Leave empty to skip public ALB record.
+  AlbRecordName:
+    Type: String
+    Default: alb.example.com
+  AlbDnsName:
+    Type: String
+    Default: ""
+  AlbCanonicalHostedZoneId:
+    Type: String
+    Default: ""
+  MgmtAlbRecordName:
+    Type: String
+    Default: mgmt-alb.example.com
+  CmAlbRecordName:
+    Type: String
+    Default: cm-alb.example.com
+  Indexer1AlbRecordName:
+    Type: String
+    Default: indexer-1-alb.example.com
+  Indexer2AlbRecordName:
+    Type: String
+    Default: indexer-2-alb.example.com
+  Indexer3AlbRecordName:
+    Type: String
+    Default: indexer-3-alb.example.com
+  AdminAlbDnsName:
+    Type: String
+    Default: ""
+  AdminAlbCanonicalHostedZoneId:
+    Type: String
+    Default: ""
+
+Conditions:
+  CreatePublicAlbRecord: !And
+    - !Not [!Equals [!Ref PublicHostedZoneId, ""]]
+    - !Not [!Equals [!Ref AlbDnsName, ""]]
+    - !Not [!Equals [!Ref AlbCanonicalHostedZoneId, ""]]
+  CreateAdminAlbRecords: !And
+    - !Not [!Equals [!Ref PublicHostedZoneId, ""]]
+    - !Not [!Equals [!Ref AdminAlbDnsName, ""]]
+    - !Not [!Equals [!Ref AdminAlbCanonicalHostedZoneId, ""]]
+
+Resources:
+  PrivateHostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref PrivateZoneName
+      VPCs:
+        - VPCId: !Ref VpcId
+          VPCRegion: !Ref AWS::Region
+      HostedZoneTags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-private-zone
+
+  Shc1Record:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref PrivateHostedZone
+      Name: !Sub shc-1.${PrivateZoneName}
+      Type: A
+      TTL: "60"
+      ResourceRecords:
+        - 10.0.1.10
+
+  Shc2Record:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref PrivateHostedZone
+      Name: !Sub shc-2.${PrivateZoneName}
+      Type: A
+      TTL: "60"
+      ResourceRecords:
+        - 10.0.3.10
+
+  MgmtRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref PrivateHostedZone
+      Name: !Sub mgmt.${PrivateZoneName}
+      Type: A
+      TTL: "60"
+      ResourceRecords:
+        - 10.0.2.10
+
+  CmRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref PrivateHostedZone
+      Name: !Sub cm.${PrivateZoneName}
+      Type: A
+      TTL: "60"
+      ResourceRecords:
+        - 10.0.2.11
+
+  Indexer1Record:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref PrivateHostedZone
+      Name: !Sub indexer-1.${PrivateZoneName}
+      Type: A
+      TTL: "60"
+      ResourceRecords:
+        - 10.0.2.12
+
+  Indexer2Record:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref PrivateHostedZone
+      Name: !Sub indexer-2.${PrivateZoneName}
+      Type: A
+      TTL: "60"
+      ResourceRecords:
+        - 10.0.2.13
+
+  Indexer3Record:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref PrivateHostedZone
+      Name: !Sub indexer-3.${PrivateZoneName}
+      Type: A
+      TTL: "60"
+      ResourceRecords:
+        - 10.0.2.14
+
+  PublicAlbRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreatePublicAlbRecord
+    Properties:
+      HostedZoneId: !Ref PublicHostedZoneId
+      Name: !Ref AlbRecordName
+      Type: A
+      AliasTarget:
+        DNSName: !Ref AlbDnsName
+        HostedZoneId: !Ref AlbCanonicalHostedZoneId
+        EvaluateTargetHealth: true
+
+  MgmtAdminAlbRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateAdminAlbRecords
+    Properties:
+      HostedZoneId: !Ref PublicHostedZoneId
+      Name: !Ref MgmtAlbRecordName
+      Type: A
+      AliasTarget:
+        DNSName: !Ref AdminAlbDnsName
+        HostedZoneId: !Ref AdminAlbCanonicalHostedZoneId
+        EvaluateTargetHealth: true
+
+  CmAdminAlbRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateAdminAlbRecords
+    Properties:
+      HostedZoneId: !Ref PublicHostedZoneId
+      Name: !Ref CmAlbRecordName
+      Type: A
+      AliasTarget:
+        DNSName: !Ref AdminAlbDnsName
+        HostedZoneId: !Ref AdminAlbCanonicalHostedZoneId
+        EvaluateTargetHealth: true
+
+  Indexer1AdminAlbRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateAdminAlbRecords
+    Properties:
+      HostedZoneId: !Ref PublicHostedZoneId
+      Name: !Ref Indexer1AlbRecordName
+      Type: A
+      AliasTarget:
+        DNSName: !Ref AdminAlbDnsName
+        HostedZoneId: !Ref AdminAlbCanonicalHostedZoneId
+        EvaluateTargetHealth: true
+
+  Indexer2AdminAlbRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateAdminAlbRecords
+    Properties:
+      HostedZoneId: !Ref PublicHostedZoneId
+      Name: !Ref Indexer2AlbRecordName
+      Type: A
+      AliasTarget:
+        DNSName: !Ref AdminAlbDnsName
+        HostedZoneId: !Ref AdminAlbCanonicalHostedZoneId
+        EvaluateTargetHealth: true
+
+  Indexer3AdminAlbRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateAdminAlbRecords
+    Properties:
+      HostedZoneId: !Ref PublicHostedZoneId
+      Name: !Ref Indexer3AlbRecordName
+      Type: A
+      AliasTarget:
+        DNSName: !Ref AdminAlbDnsName
+        HostedZoneId: !Ref AdminAlbCanonicalHostedZoneId
+        EvaluateTargetHealth: true
+
+Outputs:
+  PrivateHostedZoneId:
+    Value: !Ref PrivateHostedZone

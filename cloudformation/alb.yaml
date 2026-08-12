@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Internet-facing public ALB for SHC Splunk Web and HEC. Port 8089 is intentionally not exposed.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnetCId:
+    Type: AWS::EC2::Subnet::Id
+  PublicAlbSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  Shc1InstanceId:
+    Type: String
+  Shc2InstanceId:
+    Type: String
+  Indexer1InstanceId:
+    Type: String
+  Indexer2InstanceId:
+    Type: String
+  Indexer3InstanceId:
+    Type: String
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN for *.example.com.
+  HealthCheckPath:
+    Type: String
+    Default: /en-US/account/login
+  HecHealthCheckPath:
+    Type: String
+    Default: /services/collector/health
+
+Resources:
+  SplunkAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub splunk-${Environment}-alb
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+      SecurityGroups:
+        - !Ref PublicAlbSecurityGroupId
+      Subnets:
+        - !Ref PublicSubnetAId
+        - !Ref PublicSubnetCId
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-alb
+
+  SplunkWebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub splunk-${Environment}-web-tg
+      VpcId: !Ref VpcId
+      TargetType: instance
+      Protocol: HTTP
+      Port: 8000
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: !Ref HealthCheckPath
+      Matcher:
+        HttpCode: 200-399
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: "true"
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: "3600"
+      Targets:
+        - Id: !Ref Shc1InstanceId
+          Port: 8000
+        - Id: !Ref Shc2InstanceId
+          Port: 8000
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-web-tg
+
+  SplunkHecTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub splunk-${Environment}-hec-tg
+      VpcId: !Ref VpcId
+      TargetType: instance
+      Protocol: HTTPS
+      Port: 8088
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTPS
+      HealthCheckPort: traffic-port
+      HealthCheckPath: !Ref HecHealthCheckPath
+      Matcher:
+        HttpCode: 200-399
+      Targets:
+        - Id: !Ref Indexer1InstanceId
+          Port: 8088
+        - Id: !Ref Indexer2InstanceId
+          Port: 8088
+        - Id: !Ref Indexer3InstanceId
+          Port: 8088
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-hec-tg
+
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref SplunkAlb
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref SplunkWebTargetGroup
+
+  HecHttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref SplunkAlb
+      Port: 8088
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref SplunkHecTargetGroup
+
+Outputs:
+  AlbArn:
+    Value: !Ref SplunkAlb
+  AlbDnsName:
+    Value: !GetAtt SplunkAlb.DNSName
+  AlbCanonicalHostedZoneId:
+    Value: !GetAtt SplunkAlb.CanonicalHostedZoneID
+  SplunkWebTargetGroupArn:
+    Value: !Ref SplunkWebTargetGroup
+  SplunkHecTargetGroupArn:
+    Value: !Ref SplunkHecTargetGroup

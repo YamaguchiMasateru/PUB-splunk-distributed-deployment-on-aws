@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: IAM role and instance profile for Splunk EC2 instances.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  TemplateBucketName:
+    Type: String
+    Default: example-splunk-deployment-bucket
+
+Resources:
+  SplunkEc2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub splunk-${Environment}-ec2-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: splunk-ec2-bootstrap-access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadBootstrapAssets
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub arn:aws:s3:::${TemplateBucketName}/*
+              - Sid: WriteSsmRunCommandLogs
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub arn:aws:s3:::${TemplateBucketName}/ssm-run-command/*
+              - Sid: PutCloudWatchLogRetention
+                Effect: Allow
+                Action:
+                  - logs:PutRetentionPolicy
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub splunk-${Environment}-ec2-role
+
+  SplunkEc2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub splunk-${Environment}-ec2-profile
+      Roles:
+        - !Ref SplunkEc2Role
+
+Outputs:
+  SplunkEc2RoleArn:
+    Value: !GetAtt SplunkEc2Role.Arn
+  SplunkEc2InstanceProfileName:
+    Value: !Ref SplunkEc2InstanceProfile
