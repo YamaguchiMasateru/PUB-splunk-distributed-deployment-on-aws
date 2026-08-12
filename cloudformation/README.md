@@ -2,6 +2,17 @@
 
 Splunk Enterpriseの検証基盤を、親スタック1個と子スタック8個で作成するサンプルです。CloudFormationが作成するのはAWS基盤までで、Splunk Enterpriseのインストールやクラスタ設定は含みません。
 
+## Security considerations
+
+検証用テンプレートには、次の制約があります。デプロイ前に利用環境の要件に合わせて変更してください。
+
+- 全EC2のEBS暗号化が無効です（[`ec2-shc.yaml`](ec2-shc.yaml)、[`ec2-private.yaml`](ec2-private.yaml)）。
+- EC2でIMDSv2を必須にする`MetadataOptions.HttpTokens: required`を指定していません。
+- Search Head EC2はパブリックIP付きです。Security Groupで直接のインバウンド接続は許可していませんが、private subnetへの配置も検討してください（[`ec2-shc.yaml`](ec2-shc.yaml)）。
+- 管理用ALBは`internet-facing`です。接続元CIDRで制限していますが、管理画面をインターネット経由で公開する設計です（[`admin-alb.yaml`](admin-alb.yaml)）。
+- `mgmt`、`cm`、`indexer-*`など、管理ノードの役割が分かる名前を公開DNSに登録します（[`route53.yaml`](route53.yaml)）。
+- ALBのアクセスログ、AWS WAF、削除保護は設定していません。
+
 ## Templates
 
 | ファイル | 内容 |
